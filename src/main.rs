@@ -49,9 +49,9 @@ impl CPU {
                 }
                 (0, 0, 0xE, 0xE) => self.ret(),
                 (0x2, _, _, _) => self.call(nnn),
-                (0x8, _, _, 0x4) => {
-                    self.add_xy(x, y);
-                }
+                (0x8, _, _, 0x4) => self.add_xy(x, y),
+                (0x8, _, _, 0x5) => self.sub_xy(x, y),
+                (0x8, _, _, 0x2) => self.and_xy(x, y),
                 _ => todo!("opcode {:04x}", opcode),
             }
         }
@@ -69,6 +69,27 @@ impl CPU {
         } else {
             self.registers[0xF] = 0;
         }
+    }
+
+    fn sub_xy(&mut self, x: u8, y: u8) {
+        let arg1 = self.registers[x as usize];
+        let arg2 = self.registers[y as usize];
+
+        let (val, borrow) = arg1.overflowing_sub(arg2);
+        self.registers[x as usize] = val;
+
+        if borrow {
+            self.registers[0xF] = 0;
+        } else {
+            self.registers[0xF] = 1;
+        }
+    }
+
+    fn and_xy(&mut self, x: u8, y: u8) {
+        let arg1 = self.registers[x as usize];
+        let arg2 = self.registers[y as usize];
+
+        self.registers[x as usize] = arg1 & arg2;
     }
 
     fn call(&mut self, addr: u16) {
@@ -102,23 +123,14 @@ fn main() {
     cpu.registers[1] = 10;
 
     let program: Vec<u8> = vec![
-        0x21, 0x00, // CALL 0x100
-        0x21, 0x00, // CALL 0x100
-        0x00, 0x00, // NOP
-        0x80, 0x14, // ADD V0, V1
-        0x80, 0x14, // ADD V0, V1
-        0x00, 0xEE, // RET
+        0x80, 0x15, // SUB V0, V1 (5 - 10 = -5, ou 251 em u8 sem sinal)
+        0x80, 0x14, // ADD V0, V1 (251 + 10 = 5)
+        0x80, 0x12, // AND V0, V1 (5 & 10 = 0)
+        0x00, 0x00, // NOP (fim da execução)
     ];
 
-    // load program from address 0x000 (start)
-    cpu.load_program(&program[0..6], 0x000);
-
-    // load subroutine of memory from address 0x100
-    cpu.load_program(&program[6..], 0x100);
-
+    cpu.load_program(&program, 0x000);
     cpu.run();
 
-    assert_eq!(cpu.registers[0], 45);
-
-    println!("5 + (10 * 2) + (10 * 2) = {}", cpu.registers[0]);
+    println!("Resultado do registrador V0: {}", cpu.registers[0]);
 }
