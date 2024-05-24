@@ -41,6 +41,7 @@ impl CPU {
             let d = ((opcode & 0x000F) >> 0) as u8;
 
             let nnn = opcode & 0x0FFF;
+            let kk = (opcode & 0x00FF) as u8;
 
             match (c, x, y, d) {
                 (0, 0, 0, 0) => {
@@ -48,10 +49,16 @@ impl CPU {
                     return;
                 }
                 (0, 0, 0xE, 0xE) => self.ret(),
+                (0x1, _, _, _) => self.jmp(nnn),
                 (0x2, _, _, _) => self.call(nnn),
+                (0x3, _, _, _) => self.se(x, kk),
+                (0x4, _, _, _) => self.sne(x, kk),
+                (0x6, _, _, _) => self.ld(x, kk),
                 (0x8, _, _, 0x4) => self.add_xy(x, y),
                 (0x8, _, _, 0x5) => self.sub_xy(x, y),
                 (0x8, _, _, 0x2) => self.and_xy(x, y),
+                (0x8, _, _, 0x1) => self.or_xy(x, y),
+                (0x8, _, _, 0x3) => self.xor_xy(x, y),
                 _ => todo!("opcode {:04x}", opcode),
             }
         }
@@ -92,6 +99,24 @@ impl CPU {
         self.registers[x as usize] = arg1 & arg2;
     }
 
+    fn or_xy(&mut self, x: u8, y: u8) {
+        let arg1 = self.registers[x as usize];
+        let arg2 = self.registers[y as usize];
+
+        self.registers[x as usize] = arg1 | arg2;
+    }
+
+    fn xor_xy(&mut self, x: u8, y: u8) {
+        let arg1 = self.registers[x as usize];
+        let arg2 = self.registers[y as usize];
+
+        self.registers[x as usize] = arg1 ^ arg2;
+    }
+
+    fn jmp(&mut self, addr: u16) {
+        self.position_in_memory = addr as usize;
+    }
+
     fn call(&mut self, addr: u16) {
         let sp = self.stack_pointer;
         let stack = &mut self.stack;
@@ -114,19 +139,38 @@ impl CPU {
         let addr = self.stack[self.stack_pointer];
         self.position_in_memory = addr as usize;
     }
+
+    fn ld(&mut self, x: u8, kk: u8) {
+        self.registers[x as usize] = kk;
+    }
+
+    fn se(&mut self, x: u8, kk: u8) {
+        if self.registers[x as usize] == kk {
+            self.position_in_memory += 2;
+        }
+    }
+
+    fn sne(&mut self, x: u8, kk: u8) {
+        if self.registers[x as usize] != kk {
+            self.position_in_memory += 2;
+        }
+    }
 }
 
 fn main() {
     let mut cpu = CPU::new();
 
-    cpu.registers[0] = 5;
-    cpu.registers[1] = 10;
-
     let program: Vec<u8> = vec![
-        0x80, 0x15, // SUB V0, V1 (5 - 10 = -5, ou 251 em u8 sem sinal)
-        0x80, 0x14, // ADD V0, V1 (251 + 10 = 5)
-        0x80, 0x12, // AND V0, V1 (5 & 10 = 0)
-        0x00, 0x00, // NOP (fim da execução)
+        0x60, 0x05, // LD V0, 5
+        0x61, 0x0A, // LD V1, 10
+        0x80, 0x15, // SUB V0, V1
+        0x80, 0x14, // ADD V0, V1
+        0x80, 0x12, // AND V0, V1
+        0x80, 0x11, // OR V0, V1
+        0x80, 0x13, // XOR V0, V1
+        0x30, 0x00, // SE V0, 0
+        0x40, 0x00, // SNE V0, 0
+        0x12, 0x00, // JMP 0x200 (endless loop for demonstration)
     ];
 
     cpu.load_program(&program, 0x000);
