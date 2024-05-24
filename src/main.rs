@@ -59,6 +59,8 @@ impl CPU {
                 (0x8, _, _, 0x2) => self.and_xy(x, y),
                 (0x8, _, _, 0x1) => self.or_xy(x, y),
                 (0x8, _, _, 0x3) => self.xor_xy(x, y),
+                (0x8, _, _, 0xC) => self.mul_xy(x, y),
+                (0x8, _, _, 0xD) => self.div_xy(x, y),
                 _ => todo!("opcode {:04x}", opcode),
             }
         }
@@ -92,6 +94,32 @@ impl CPU {
         }
     }
 
+    fn mul_xy(&mut self, x: u8, y: u8) {
+        let arg1 = self.registers[x as usize];
+        let arg2 = self.registers[y as usize];
+
+        let (val, overflow) = arg1.overflowing_mul(arg2);
+        self.registers[x as usize] = val;
+
+        if overflow {
+            self.registers[0xF] = 1;
+        } else {
+            self.registers[0xF] = 0;
+        }
+    }
+
+    fn div_xy(&mut self, x: u8, y: u8) {
+        let arg1 = self.registers[x as usize];
+        let arg2 = self.registers[y as usize];
+
+        if arg2 == 0 {
+            panic!("ERROR: division by zero is not allowed");
+        }
+
+        self.registers[0xF] = arg1 % arg2;
+        self.registers[x as usize] = arg1 / arg2;
+    }
+
     fn and_xy(&mut self, x: u8, y: u8) {
         let arg1 = self.registers[x as usize];
         let arg2 = self.registers[y as usize];
@@ -122,7 +150,7 @@ impl CPU {
         let stack = &mut self.stack;
 
         if sp > stack.len() {
-            panic!("stack overflow");
+            panic!("ERROR: stack overflow");
         }
 
         stack[sp] = self.position_in_memory as u16;
@@ -132,7 +160,7 @@ impl CPU {
 
     fn ret(&mut self) {
         if self.stack_pointer == 0 {
-            panic!("stack underflow");
+            panic!("ERROR: stack underflow");
         }
 
         self.stack_pointer -= 1;
@@ -163,18 +191,14 @@ fn main() {
     let program: Vec<u8> = vec![
         0x60, 0x05, // LD V0, 5
         0x61, 0x0A, // LD V1, 10
-        0x80, 0x15, // SUB V0, V1
-        0x80, 0x14, // ADD V0, V1
-        0x80, 0x12, // AND V0, V1
-        0x80, 0x11, // OR V0, V1
-        0x80, 0x13, // XOR V0, V1
-        0x30, 0x00, // SE V0, 0
-        0x40, 0x00, // SNE V0, 0
-        0x12, 0x00, // JMP 0x200 (endless loop for demonstration)
+        0x80, 0x1C, // MUL V0, V1
+        0x80, 0x1D, // DIV V0, V1
+        0x00, 0x00, // NOP (fim da execução)
     ];
 
     cpu.load_program(&program, 0x000);
     cpu.run();
 
     println!("Resultado do registrador V0: {}", cpu.registers[0]);
+    println!("Resto da divisão (registrador VF): {}", cpu.registers[0xF]);
 }
