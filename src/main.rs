@@ -1,3 +1,5 @@
+use crossterm::event::{self, Event, KeyCode};
+
 #[derive(Debug)]
 struct CPU {
     registers: [u8; 16],
@@ -61,6 +63,7 @@ impl CPU {
                 (0x8, _, _, 0x3) => self.xor_xy(x, y),
                 (0x8, _, _, 0xC) => self.mul_xy(x, y),
                 (0x8, _, _, 0xD) => self.div_xy(x, y),
+                (0xF, 0, 0, 0xA) => self.read_key(),
                 _ => todo!("opcode {:04x}", opcode),
             }
         }
@@ -183,6 +186,27 @@ impl CPU {
             self.position_in_memory += 2;
         }
     }
+
+    fn read_key(&mut self) {
+        println!("press a key...");
+        loop {
+            if let Event::Key(event) = event::read().unwrap() {
+                match event.code {
+                    KeyCode::Char(c) => {
+                        println!("key pressed: {}", c);
+                        // save the key to v0 register (example)
+                        self.registers[0] = c as u8;
+                        break;
+                    }
+                    KeyCode::Esc => {
+                        println!("terminating keyboard reading");
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
 }
 
 fn main() {
@@ -193,12 +217,10 @@ fn main() {
         0x61, 0x0A, // LD V1, 10
         0x80, 0x1C, // MUL V0, V1
         0x80, 0x1D, // DIV V0, V1
+        0xF0, 0x0A, // LD V0, K (Leitura de tecla)
         0x00, 0x00, // NOP (fim da execução)
     ];
 
     cpu.load_program(&program, 0x000);
     cpu.run();
-
-    println!("Resultado do registrador V0: {}", cpu.registers[0]);
-    println!("Resto da divisão (registrador VF): {}", cpu.registers[0xF]);
 }
